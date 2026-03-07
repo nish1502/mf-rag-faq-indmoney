@@ -120,7 +120,7 @@ def retrieve_context(query, scheme=None, top_k=8):
             cur.execute("""
                 SELECT content, url, title, 1 - (embedding <=> %s::vector) AS similarity
                 FROM fund_embeddings
-                WHERE scheme = %s
+                WHERE scheme ILIKE %s
                 ORDER BY embedding <=> %s::vector
                 LIMIT %s;
             """, (query_embedding, scheme, query_embedding, top_k))
