@@ -99,38 +99,49 @@ SUPPORTED_SCHEMES = [
     "SBI Large Cap Fund",
     "SBI Small Cap Fund",
     "SBI Long Term Equity Fund",
-    "SBI Focused Fund"
+    "SBI Focused Fund",
+    "All Schemes"
 ]
 
 # AI Request Limiter Settings
 MAX_REQUESTS_PER_DAY = 40
 request_count = 0
 
-def retrieve_context(query, scheme=None, top_k=8):
+def retrieve_context(query, scheme=None, top_k=5):
     """Retrieves context from PostgreSQL filtered by scheme and re-ranks based on keyword presence."""
     database_url = os.getenv("DATABASE_URL")
     if not database_url:
         return []
+
+    # Step 1: Query Rewriting for better context
+    if scheme and scheme != "All Schemes":
+        rewritten_query = f"{query} for {scheme}"
+    else:
+        rewritten_query = query
+
     try:
         embedding_result = gemini_client.models.embed_content(
             model=EMBEDDING_MODEL,
-            contents=query
+            contents=rewritten_query
         )
         query_embedding = embedding_result.embeddings[0].values
     except Exception as e:
         print(f"Embedding error: {e}")
         return []
+
     semantic_results = []
     try:
         print("Connecting to PostgreSQL database...")
         conn = psycopg2.connect(database_url)
         register_vector(conn)
         cur = conn.cursor()
-        if scheme:
+        
+        # Use All Schemes logic or normalized ILIKE/TRIM filtering
+        if scheme and scheme != "All Schemes":
             cur.execute("""
                 SELECT content, url, title, 1 - (embedding <=> %s::vector) AS similarity
                 FROM fund_embeddings
-                WHERE scheme = %s
+                WHERE LOWER(TRIM(scheme)) = LOWER(TRIM(%s))
                 ORDER BY embedding <=> %s::vector
                 LIMIT %s;
             """, (query_embedding, scheme, query_embedding, top_k))
@@ -141,17 +152,20 @@ def retrieve_context(query, scheme=None, top_k=8):
                 ORDER BY embedding <=> %s::vector
                 LIMIT %s;
             """, (query_embedding, query_embedding, top_k))
+            
         rows = cur.fetchall()
-        print("Selected scheme:", scheme)
-        print("Rows retrieved:", len(rows))
-        if rows:
-            print("Retrieved titles:", [r[2] for r in rows])
         cur.close()
         conn.close()
         semantic_results = [{"content": r[0], "url": r[1], "title": r[2], "similarity": r[3]} for r in rows]
     except Exception as e:
         print(f"Database error during retrieval: {e}")
         return []
+
+    # Debug logging
+    print(f"Query: {query}")
+    print(f"Scheme: {scheme}")
+    print(f"Retrieved documents: {[c['title'] for c in semantic_results]}")
+
     keywords = ["exit load", "expense ratio", "benchmark", "riskometer", "sip", "lumpsum", "lock-in"]
     query_lower = query.lower()
     target_keywords = [kw for kw in keywords if kw in query_lower]
@@ -171,19 +185,19 @@ def generate_answer(query, contexts):
     prompt = f"""You are a factual assistant for INDMoney's Mutual Fund FAQ. 
 Answer questions based ONLY on the provided context. 
 
+Strict Rules:
+1. Use ONLY the retrieved context.
+2. Do NOT add explanations or financial commentary.
+3. Do NOT infer information not present in the context.
+4. Maximum answer length: 3 sentences.
+5. Always include exactly one source URL.
+
 Strict Response Format:
 Sentence 1: Direct factual answer.
-Sentence 2 (optional): Short explanation.
-New line: Source: <URL>
+Sentence 2 (optional): Short explanation from context.
+Source: <URL>
 
-Constraints:
-1. Answers must be <= 3 sentences.
-2. MUST include exactly ONE citation link from the provided context using the "Source: URL" format.
-3. Do NOT use parentheses, square brackets, or any internal markers (e.g., [Context 1], [Chunk]) in the final answer.
-4. If the answer is not in the context, say: "I do not have the factual information for this specific request."
-5. Refuse investment advice. If asked for a recommendation, say: "I only provide factual details. For investment advice, please consult a SEBI-registered advisor."
-6. Maintain a professional and direct tone.
-7. CRITICAL: DO NOT add any conversational filler, meta-commentary, or introductory remarks like "Based on the context..." or "According to the provided information...".
+If the answer is not in the context, say: "I do not have the factual information for this specific request."
 
 Context:
 {context_text}
@@ -251,7 +265,8 @@ async def ask_question(request: QuestionRequest):
             "• SBI Large Cap Fund\n"
             "• SBI Small Cap Fund\n"
             "• SBI Long Term Equity Fund\n"
-            "• SBI Focused Fund"
+            "• SBI Focused Equity Fund\n"
+            "• All Schemes"
         )
         return {"answer": refusal, "sources": [], "documents": []}
 
@@ -262,7 +277,8 @@ async def ask_question(request: QuestionRequest):
             "• SBI Large Cap Fund\n"
             "• SBI Small Cap Fund\n"
             "• SBI Long Term Equity Fund\n"
-            "• SBI Focused Fund"
+            "• SBI Focused Equity Fund\n"
+            "• All Schemes"
         )
         return {"answer": refusal, "sources": [], "documents": []}
 
