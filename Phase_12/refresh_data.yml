@@ -1,0 +1,54 @@
+name: Weekly Mutual Fund Data Refresh
+
+on:
+  schedule:
+    # Runs at 00:00 UTC every Sunday
+    - cron: '0 0 * * 0'
+  workflow_dispatch: # Allows manual trigger
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install Dependencies
+        run: |
+          pip install -r Phase_1/requirements.txt
+          playwright install chromium
+          pip install google-generativeai psycopg2-binary pgvector python-dotenv langchain-text-splitters
+
+      - name: Run Scraper (Phase 1)
+        run: |
+          cd Phase_1
+          python scraper.py
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+      - name: Clean and Chunk (Phase 2 & 3)
+        run: |
+          cd Phase_2 && python cleaning.py
+          cd ../Phase_3 && python chunking.py
+
+      - name: Generate Embeddings (Phase 4)
+        run: |
+          cd Phase_4
+          python embedding.py
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+      - name: Update Vector Database (Phase 5)
+        run: |
+          cd Phase_5
+          python store_embeddings.py
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Notify Success
+        run: echo "Mutual Fund vector database refresh complete!"
