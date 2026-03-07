@@ -95,9 +95,6 @@ def retrieve_context(query, scheme=None, top_k=8):
         st.error("DATABASE_URL not found in environment.")
         return []
 
-    if 'Nishita@152' in database_url:
-        database_url = database_url.replace('Nishita@152', 'Nishita%40152')
-
     # Step 1: Generate Embedding
     try:
         embedding_result = gemini_client.models.embed_content(
@@ -112,6 +109,7 @@ def retrieve_context(query, scheme=None, top_k=8):
     # Step 2: Semantic Search in PostgreSQL with pgvector
     semantic_results = []
     try:
+        print("Connecting to PostgreSQL database...")
         conn = psycopg2.connect(database_url)
         register_vector(conn)
         cur = conn.cursor()

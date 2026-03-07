@@ -111,8 +111,6 @@ def retrieve_context(query, scheme=None, top_k=8):
     database_url = os.getenv("DATABASE_URL")
     if not database_url:
         return []
-    if 'Nishita@152' in database_url:
-        database_url = database_url.replace('Nishita@152', 'Nishita%40152')
     try:
         embedding_result = gemini_client.models.embed_content(
             model=EMBEDDING_MODEL,
@@ -124,6 +122,7 @@ def retrieve_context(query, scheme=None, top_k=8):
         return []
     semantic_results = []
     try:
+        print("Connecting to PostgreSQL database...")
         conn = psycopg2.connect(database_url)
         register_vector(conn)
         cur = conn.cursor()
