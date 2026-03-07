@@ -42,7 +42,8 @@ export default function INDMoneyChatbot() {
 
     // Fetch metadata
     useEffect(() => {
-        fetch('http://localhost:8000/metadata')
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+        fetch(`${apiUrl}/metadata`)
             .then(res => res.json())
             .then(data => setLastUpdated(data.data_last_updated))
             .catch(() => setLastUpdated("05-03-2026")); // Fallback
@@ -66,7 +67,8 @@ export default function INDMoneyChatbot() {
         setIsLoading(true);
 
         try {
-            const response = await fetch('http://localhost:8000/chat', {
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+            const response = await fetch(`${apiUrl}/chat`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
