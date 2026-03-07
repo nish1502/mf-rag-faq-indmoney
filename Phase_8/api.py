@@ -143,6 +143,10 @@ def retrieve_context(query, scheme=None, top_k=8):
                 LIMIT %s;
             """, (query_embedding, query_embedding, top_k))
         rows = cur.fetchall()
+        print("Selected scheme:", scheme)
+        print("Rows retrieved:", len(rows))
+        if rows:
+            print("Retrieved titles:", [r[2] for r in rows])
         cur.close()
         conn.close()
         semantic_results = [{"content": r[0], "url": r[1], "title": r[2], "similarity": r[3]} for r in rows]

@@ -133,6 +133,10 @@ def retrieve_context(query, scheme=None, top_k=8):
             """, (query_embedding, query_embedding, top_k))
         
         rows = cur.fetchall()
+        print("Selected scheme:", scheme)
+        print("Rows retrieved:", len(rows))
+        if rows:
+            print("Retrieved titles:", [r[2] for r in rows])
         cur.close()
         conn.close()
         
