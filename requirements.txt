@@ -2,6 +2,7 @@ fastapi
 uvicorn
 psycopg2-binary
 pgvector
+torch==2.2.2
 sentence-transformers
 groq
 python-dotenv
