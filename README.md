@@ -118,7 +118,43 @@ The system is built with multiple safety layers:
     ```bash
     streamlit run Phase_8/app.py
     ```
+---
 
+## AI Product Thinking (AI PM Perspective)
+
+This project was built not only as a technical RAG system but also with a product mindset focused on solving a real user problem: **quick access to factual mutual fund information without misinformation or financial advice.**
+
+### Problem
+Retail investors often search for basic mutual fund facts such as expense ratios, exit loads, SIP limits, and ELSS lock-in periods. However, information is scattered across AMC pages, PDFs, and regulatory documents, making it difficult to quickly find verified answers.
+
+### Target Users
+- Retail investors comparing mutual fund schemes
+- Customer support teams answering repetitive mutual fund questions
+- Content or operations teams in fintech platforms
+
+### Product Design Decisions
+Several product decisions were intentionally built into the system:
+
+- **Facts-only responses** to avoid regulatory risks related to investment advice.
+- **Mandatory source citation** to build trust and transparency.
+- **≤3 sentence answers** to improve readability and reduce hallucination risk.
+- **Guardrails for PII** to prevent sensitive data usage.
+- **Scheme-level filtering** to allow users to query specific mutual funds easily.
+
+### Product Metrics (Future)
+Potential metrics to evaluate this assistant in production:
+
+- Query success rate
+- Retrieval accuracy
+- Refusal accuracy for non-factual queries
+- Average response time
+- Source citation reliability
+
+### Future Product Improvements
+- Expand coverage to multiple AMCs
+- Add real-time NAV refresh pipelines
+- Add multilingual support for Indian investors
+- Integrate with fintech apps for customer support automation
 ---
 
 ## Disclaimer
