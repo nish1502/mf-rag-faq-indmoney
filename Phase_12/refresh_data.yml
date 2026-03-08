@@ -28,8 +28,6 @@ jobs:
         run: |
           cd Phase_1
           python scraper.py
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 
       - name: Clean and Chunk (Phase 2 & 3)
         run: |
@@ -40,8 +38,6 @@ jobs:
         run: |
           cd Phase_4
           python embedding.py
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 
       - name: Update Vector Database (Phase 5)
         run: |

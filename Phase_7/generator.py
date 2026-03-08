@@ -1,5 +1,4 @@
-import os
-import google.generativeai as genai
+from groq import Groq
 from dotenv import load_dotenv
 
 # System Prompt to enforce the 'Senior AI Architect' persona and product constraints
@@ -17,17 +16,16 @@ Constraints:
 """
 
 def generate_answer(query, contexts):
-    """Generates an answer using Gemini Flash 1.5."""
+    """Generates an answer using Groq LLaMA."""
     load_dotenv(dotenv_path="../.env")
-    api_key = os.getenv("GEMINI_API_KEY")
+    api_key = os.getenv("GROQ_API_KEY")
     
     if not api_key:
-        print("Error: Missing GEMINI_API_KEY.")
+        print("Error: Missing GROQ_API_KEY.")
         return "API Key missing."
 
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=SYSTEM_PROMPT)
-
+    client = Groq(api_key=api_key)
+    
     # Format context for the LLM
     context_text = ""
     for idx, ctx in enumerate(contexts):
@@ -36,11 +34,19 @@ def generate_answer(query, contexts):
     prompt = f"User Question: {query}\n\nSearch Context:\n{context_text}"
 
     try:
-        response = model.generate_content(prompt)
-        return response.text.strip()
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.1
+        )
+        return response.choices[0].message.content.strip()
     except Exception as e:
         print(f"Error generating answer: {e}")
         return "An error occurred during generation."
+
 
 if __name__ == "__main__":
     # Test case with mock context

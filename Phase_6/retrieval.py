@@ -1,35 +1,29 @@
 import os
 import psycopg2
 from pgvector.psycopg2 import register_vector
-import google.generativeai as genai
+from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
 
 # Configuration
-MODEL_NAME = "models/gemini-embedding-001"
+MODEL_NAME = "all-MiniLM-L6-v2"
+embedding_model = SentenceTransformer(MODEL_NAME)
 
 def retrieve_context(query, top_k=3):
     """Retrieves context from PostgreSQL based on query similarity."""
     load_dotenv(dotenv_path="../.env")
-    api_key = os.getenv("GEMINI_API_KEY")
     database_url = os.getenv("DATABASE_URL")
 
-    if not api_key or not database_url:
-        print("Error: Missing GEMINI_API_KEY or DATABASE_URL in .env.")
+    if not database_url:
+        print("Error: Missing DATABASE_URL in .env.")
         return []
 
     # Handle the Nishita@152 issue
     if 'Nishita@152' in database_url:
         database_url = database_url.replace('Nishita@152', 'Nishita%40152')
 
-    # Step 1: Embed the query
-    genai.configure(api_key=api_key)
+    # Step 1: Embed the query locally
     try:
-        embedding_result = genai.embed_content(
-            model=MODEL_NAME,
-            content=query,
-            task_type="retrieval_query"
-        )
-        query_embedding = embedding_result['embedding']
+        query_embedding = embedding_model.encode(query).tolist()
     except Exception as e:
         print(f"Error embedding query: {e}")
         return []

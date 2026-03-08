@@ -1,25 +1,20 @@
 import json
 import os
 import time
-import google.generativeai as genai
+from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
 from tqdm import tqdm
 
 # Configuration
-INPUT_FILE = "../Phase 3/chunks.json"
+INPUT_FILE = "../Phase_3/chunks.json"
 OUTPUT_FILE = "embeddings.json"
-MODEL_NAME = "models/gemini-embedding-001"
+MODEL_NAME = "all-MiniLM-L6-v2"
 
 def main():
     # Load API key from .env file
     load_dotenv(dotenv_path="../.env")
-    api_key = os.getenv("GEMINI_API_KEY")
-    
-    if not api_key:
-        print("Error: GEMINI_API_KEY not found in .env file.")
-        return
-
-    genai.configure(api_key=api_key)
+    # Initialize local model
+    embedding_model = SentenceTransformer(MODEL_NAME)
 
     if not os.path.exists(INPUT_FILE):
         print(f"Error: {INPUT_FILE} not found. Run Phase 3 chunking script first.")
@@ -39,15 +34,8 @@ def main():
         metadata = item.get("metadata", {})
         
         try:
-            # Generate embedding
-            result = genai.embed_content(
-                model=MODEL_NAME,
-                content=content,
-                task_type="retrieval_document",
-                title=metadata.get("title", "")
-            )
-            
-            embedding = result['embedding']
+            # Generate embedding locally
+            embedding = embedding_model.encode(content).tolist()
             
             embedded_data.append({
                 "content": content,
@@ -55,8 +43,8 @@ def main():
                 "embedding": embedding
             })
             
-            # Small delay to respect rate limits
-            time.sleep(0.1)
+            # No delay needed for local model
+            # time.sleep(0.1)
             
         except Exception as e:
             print(f"\nError generating embedding for chunk: {e}")

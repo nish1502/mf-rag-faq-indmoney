@@ -5,7 +5,7 @@ from pgvector.psycopg2 import register_vector
 from dotenv import load_dotenv
 
 # Configuration
-INPUT_FILE = "../Phase 4/embeddings.json"
+INPUT_FILE = "../Phase_4/embeddings.json"
 
 def main():
     # Load env from .env
@@ -41,7 +41,7 @@ def main():
                 content text NOT NULL,
                 url text,
                 title text,
-                embedding vector(3072)
+                embedding vector(384)
             );
         """)
         conn.commit()

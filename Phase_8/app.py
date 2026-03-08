@@ -4,7 +4,7 @@ import sys
 import psycopg2
 import re
 from pgvector.psycopg2 import register_vector
-from google import genai
+from sentence_transformers import SentenceTransformer
 from groq import Groq
 from dotenv import load_dotenv
 
@@ -15,10 +15,16 @@ load_dotenv(dotenv_path=env_path)
 
 # Initialize AI Clients
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+# Initializing embedding model once when server starts
+@st.cache_resource
+def load_embedding_model():
+    return SentenceTransformer("all-MiniLM-L6-v2")
+
+embedding_model = load_embedding_model()
 
 # Standardized Model Constants
-EMBEDDING_MODEL = "models/gemini-embedding-001"
+# Using local all-MiniLM-L6-v2 model (384 dimensions)
+EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 # LLaMA model from Groq
 GROQ_MODEL = "llama-3.1-8b-instant"
 
@@ -95,13 +101,13 @@ def retrieve_context(query, scheme=None, top_k=8):
         st.error("DATABASE_URL not found in environment.")
         return []
 
-    # Step 1: Generate Embedding
+    # Handle special characters in password if present
+    if 'Nishita@152' in database_url:
+        database_url = database_url.replace('Nishita@152', 'Nishita%40152')
+
+    # Step 1: Generate Embedding Locally
     try:
-        embedding_result = gemini_client.models.embed_content(
-            model=EMBEDDING_MODEL,
-            contents=query
-        )
-        query_embedding = embedding_result.embeddings[0].values
+        query_embedding = embedding_model.encode(query).tolist()
     except Exception as e:
         print(f"Embedding error: {e}")
         return []
@@ -109,19 +115,27 @@ def retrieve_context(query, scheme=None, top_k=8):
     # Step 2: Semantic Search in PostgreSQL with pgvector
     semantic_results = []
     try:
+        scheme_url_map = {
+            "SBI Large Cap Fund": "sbi-large-cap",
+            "SBI Small Cap Fund": "sbi-small-cap",
+            "SBI Focused Fund": "sbi-focused",
+            "SBI Long Term Equity Fund": "sbi-long-term"
+        }
+
         print("Connecting to PostgreSQL database...")
         conn = psycopg2.connect(database_url)
         register_vector(conn)
         cur = conn.cursor()
         
-        if scheme:
+        if scheme and scheme != "All Schemes" and scheme in scheme_url_map:
+            url_pattern = f"%{scheme_url_map[scheme]}%"
             cur.execute("""
                 SELECT content, url, title, 1 - (embedding <=> %s::vector) AS similarity
                 FROM fund_embeddings
-                WHERE scheme = %s
+                WHERE url ILIKE %s
                 ORDER BY embedding <=> %s::vector
                 LIMIT %s;
-            """, (query_embedding, scheme, query_embedding, top_k))
+            """, (query_embedding, url_pattern, query_embedding, top_k))
         else:
             cur.execute("""
                 SELECT content, url, title, 1 - (embedding <=> %s::vector) AS similarity
@@ -144,7 +158,7 @@ def retrieve_context(query, scheme=None, top_k=8):
         return []
 
     # Step 3: Secondary Keyword Re-ranking
-    keywords = ["exit load", "expense ratio", "benchmark", "riskometer", "sip", "lumpsum", "lock-in"]
+    keywords = ["exit load", "expense ratio", "benchmark", "riskometer", "sip", "lumpsum", "lock-in", "nav"]
     query_lower = query.lower()
     
     target_keywords = [kw for kw in keywords if kw in query_lower]
@@ -155,7 +169,14 @@ def retrieve_context(query, scheme=None, top_k=8):
             keyword_match_count = sum(1 for kw in target_keywords if kw in content_lower)
             item['keyword_boost'] = keyword_match_count
         
-        semantic_results.sort(key=lambda x: (x.get('keyword_boost', 0), x['similarity']), reverse=True)
+        # Primary Priority: Chunks containing 'nav' if query is about nav
+        # Secondary Priority: Keyword matches
+        # Tertiary Priority: Vector similarity
+        semantic_results.sort(key=lambda x: (
+            ("nav" in x['content'].lower()) if "nav" in query_lower else False,
+            x.get('keyword_boost', 0), 
+            x['similarity']
+        ), reverse=True)
         
     return semantic_results
 
@@ -260,7 +281,7 @@ with st.sidebar:
 
 # Title and Caption
 st.title("💰 INDMoney MF Assistant")
-st.caption("Factual facts about Mutual Fund schemes. Gemini 2.5 Flash Engine.")
+st.caption("Factual facts about Mutual Fund schemes. Local all-MiniLM-L6-v2 Engine.")
 st.divider()
 
 if "messages" not in st.session_state:
