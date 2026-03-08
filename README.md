@@ -16,6 +16,9 @@ This chatbot leverages a state-of-the-art RAG pipeline to provide accurate, sour
 *   **[Sample Q&A](sample_qa.md)**: Example factual questions and answers.
 *   **[Disclaimer](#disclaimer)**: Important notice regarding factual limitations.
 
+### 📘 Learning Notes
+* **[Learning Notes](learning_notes.md)** – Key technical learnings and deployment insights from building the project.
+
 ### 🎥 Demo Video
 A short demonstration of the chatbot answering factual mutual fund queries.
 
