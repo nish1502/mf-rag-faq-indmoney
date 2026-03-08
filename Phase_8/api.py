@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
@@ -20,11 +20,23 @@ app = FastAPI()
 @app.get("/metadata")
 async def get_metadata():
     try:
-        print("REQUEST RECEIVED")
+        print("METADATA REQUEST RECEIVED")
         return {"data_last_updated": DATA_LAST_UPDATED}
     except Exception as e:
         print(f"METADATA ERROR: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/test")
+async def test_endpoint():
+    print("TEST ENDPOINT CALLED")
+    return {"status": "ok"}
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    print(f"DEBUG: Incoming Request {request.method} {request.url.path}")
+    response = await call_next(request)
+    print(f"DEBUG: Request {request.method} {request.url.path} - Result: {response.status_code}")
+    return response
 
 # Enable CORS for the frontend
 app.add_middleware(
@@ -371,7 +383,7 @@ class AnswerResponse(BaseModel):
 @app.post("/chat", response_model=AnswerResponse)
 async def ask_question(request: QuestionRequest):
     try:
-        print("REQUEST RECEIVED")
+        print(f"CHAT REQUEST RECEIVED: {request.dict()}")
         query = request.query
         scheme = request.scheme
         
