@@ -6,7 +6,7 @@ import os
 import psycopg2
 import re
 from pgvector.psycopg2 import register_vector
-from sentence_transformers import SentenceTransformer
+# from sentence_transformers import SentenceTransformer  # Removed for lazy-loading
 from groq import Groq
 from dotenv import load_dotenv
 
@@ -35,8 +35,17 @@ app.add_middleware(
 
 # Initialize AI Clients
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-# Initializing embedding model once when server starts
-embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+# Global variable for lazy-loading the model
+_embedding_model = None
+
+def get_model():
+    """Lazy-loads the embedding model only when needed."""
+    global _embedding_model
+    if _embedding_model is None:
+        print("Loading SentenceTransformer model (all-MiniLM-L6-v2)...")
+        from sentence_transformers import SentenceTransformer
+        _embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+    return _embedding_model
 
 # Standardized Model Constants
 # Using local all-MiniLM-L6-v2 model (384 dimensions)
@@ -172,7 +181,8 @@ def retrieve_context(query, scheme=None, top_k=10):
     query_embedding = None
     try:
         # Generate embedding locally
-        query_embedding = embedding_model.encode(rewritten_query).tolist()
+        model = get_model()
+        query_embedding = model.encode(rewritten_query).tolist()
     except Exception as e:
         print(f"Embedding generation failed: {e} — using keyword fallback retrieval.")
 
@@ -479,4 +489,5 @@ async def ask_question(request: QuestionRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.getenv("PORT", 10000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
