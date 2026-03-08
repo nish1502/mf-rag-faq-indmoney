@@ -37,6 +37,11 @@ The chatbot follows a robust RAG architecture:
 1.  **Data Ingestion**: Scraped HTML content and parsed PDF documents (Factsheets, KIM, SID) from official sources.
 2.  **Cleaning & Chunking**: Cleaned text using regex patterns and applied recursive character splitting with 800-character chunks and 150-character overlap.
 3.  **Embeddings**: Generated semantic vectors using the local `all-MiniLM-L6-v2` SentenceTransformers model (384 dimensions).
+
+> **Deployment Note:**  
+> The corpus embeddings were generated using SentenceTransformers during development.  
+> For deployment on Render, query embeddings may be generated via an external API to reduce memory usage and improve startup performance on the free hosting tier.
+
 4.  **Vector Store**: Stored chunks and embeddings in a PostgreSQL database with the `pgvector` extension.
 5.  **Retrieval**:
     *   **Semantic Search**: Vector similarity search using the cosine distance operator (`<->`).
