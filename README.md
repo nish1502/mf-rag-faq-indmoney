@@ -5,6 +5,11 @@ A production-grade Retrieval-Augmented Generation (RAG) chatbot designed to answ
 ## Overview
 This chatbot leverages a state-of-the-art RAG pipeline to provide accurate, source-backed information about mutual fund schemes. It specifically targets SBI Mutual Fund schemes, offering details on NAV, expense ratios, exit loads, minimum investments, and regulatory information.
 
+### 📄 Submission Documents
+*   **[Source List](source_list.csv)**: Complete list of official URLs for the corpus.
+*   **[Sample Q&A](sample_qa.md)**: Example factual questions and answers.
+*   **[Disclaimer](#disclaimer)**: Important notice regarding factual limitations.
+
 ### AMC Covered
 * **SBI Mutual Fund**
 
