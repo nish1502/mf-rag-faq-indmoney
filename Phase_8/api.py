@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Request
+import requests
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
@@ -6,7 +7,8 @@ import os
 import psycopg2
 import re
 from pgvector.psycopg2 import register_vector
-# from sentence_transformers import SentenceTransformer  # Removed for lazy-loading
+# sentence-transformers, torch, and transformers are removed for production efficiency on Render
+# Query embeddings are now fetched via Hugging Face Inference API
 from groq import Groq
 from dotenv import load_dotenv
 
@@ -52,17 +54,30 @@ app.add_middleware(
 
 # Initialize AI Clients
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-# Global variable for lazy-loading the model
-_embedding_model = None
-
-def get_model():
-    """Lazy-loads the embedding model only when needed."""
-    global _embedding_model
-    if _embedding_model is None:
-        print("Loading SentenceTransformer model (all-MiniLM-L6-v2)...")
-        from sentence_transformers import SentenceTransformer
-        _embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
-    return _embedding_model
+# Model cache removed to save memory on Render
+def get_query_embedding(text: str) -> Optional[list[float]]:
+    """Fetches embedding vector from Hugging Face Inference API (all-MiniLM-L6-v2)."""
+    model_id = "sentence-transformers/all-MiniLM-L6-v2"
+    api_url = f"https://api-inference.huggingface.co/models/{model_id}"
+    
+    # Optional: Get token from env if available (e.g., HF_TOKEN)
+    headers = {}
+    hf_token = os.getenv("HF_TOKEN")
+    if hf_token:
+        headers["Authorization"] = f"Bearer {hf_token}"
+    
+    try:
+        print(f"DEBUG: Calling Hugging Face API for model {model_id}")
+        response = requests.post(api_url, headers=headers, json={"inputs": text}, timeout=10)
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            print(f"HF API Error: {response.status_code} - {response.text}")
+            return None
+    except Exception as e:
+        print(f"HF API connection failed: {e}")
+        return None
 
 # Standardized Model Constants
 # Using local all-MiniLM-L6-v2 model (384 dimensions)
@@ -197,10 +212,9 @@ def retrieve_context(query, scheme=None, top_k=10):
 
     query_embedding = None
     try:
-        # Generate embedding locally
-        print("GENERATING EMBEDDING")
-        model = get_model()
-        query_embedding = model.encode(rewritten_query).tolist()
+        # Fetch embedding via API to keep runtime lean
+        print("GENERATING EMBEDDING (API)")
+        query_embedding = get_query_embedding(rewritten_query)
     except Exception as e:
         print(f"Embedding generation failed: {e} — using keyword fallback retrieval.")
 

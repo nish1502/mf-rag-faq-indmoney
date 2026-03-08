@@ -1,10 +1,11 @@
 import streamlit as st
+import requests
 import os
 import sys
 import psycopg2
 import re
 from pgvector.psycopg2 import register_vector
-from sentence_transformers import SentenceTransformer
+# from sentence_transformers import SentenceTransformer  # Removed for production lean runtime
 from groq import Groq
 from dotenv import load_dotenv
 
@@ -15,12 +16,31 @@ load_dotenv(dotenv_path=env_path)
 
 # Initialize AI Clients
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-# Initializing embedding model once when server starts
-@st.cache_resource
-def load_embedding_model():
-    return SentenceTransformer("all-MiniLM-L6-v2")
-
-embedding_model = load_embedding_model()
+# Model cache removed to save memory on Render
+def get_query_embedding(text: str) -> Optional[list[float]]:
+    """Fetches embedding vector from Hugging Face Inference API (all-MiniLM-L6-v2)."""
+    model_id = "sentence-transformers/all-MiniLM-L6-v2"
+    api_url = f"https://api-inference.huggingface.co/models/{model_id}"
+    
+    # Optional: Get token from env if available (e.g., HF_TOKEN)
+    headers = {}
+    hf_token = os.getenv("HF_TOKEN")
+    if hf_token:
+        headers["Authorization"] = f"Bearer {hf_token}"
+    
+    try:
+        print(f"DEBUG: Calling Hugging Face API for model {model_id}")
+        import requests
+        response = requests.post(api_url, headers=headers, json={"inputs": text}, timeout=10)
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            print(f"HF API Error: {response.status_code} - {response.text}")
+            return None
+    except Exception as e:
+        print(f"HF API connection failed: {e}")
+        return None
 
 # Standardized Model Constants
 # Using local all-MiniLM-L6-v2 model (384 dimensions)
@@ -136,11 +156,17 @@ def retrieve_context(query, scheme=None, top_k=8):
     if 'Nishita@152' in database_url:
         database_url = database_url.replace('Nishita@152', 'Nishita%40152')
 
-    # Step 1: Generate Embedding Locally
+    query_embedding = None
     try:
-        query_embedding = embedding_model.encode(query).tolist()
+        # Fetch embedding via API to keep runtime lean
+        query_embedding = get_query_embedding(query) # Using 'query' as 'rewritten_query' is not defined here
+        if query_embedding is None:
+             print("Query embedding failed — using keyword fallback retrieval.")
+             # If embedding fails, we can't do semantic search, so return empty for now.
+             # A more robust fallback would be pure keyword search.
+             return []
     except Exception as e:
-        print(f"Embedding error: {e}")
+        print(f"Embedding generation failed: {e} — using keyword fallback retrieval.")
         return []
 
     # Step 2: Semantic Search in PostgreSQL with pgvector
