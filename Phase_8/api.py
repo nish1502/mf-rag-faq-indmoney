@@ -19,8 +19,12 @@ app = FastAPI()
 
 @app.get("/metadata")
 async def get_metadata():
-    print("STEP 1: Request received (Metadata)")
-    return {"data_last_updated": DATA_LAST_UPDATED}
+    try:
+        print("REQUEST RECEIVED")
+        return {"data_last_updated": DATA_LAST_UPDATED}
+    except Exception as e:
+        print(f"METADATA ERROR: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Enable CORS for the frontend
 app.add_middleware(
@@ -182,7 +186,7 @@ def retrieve_context(query, scheme=None, top_k=10):
     query_embedding = None
     try:
         # Generate embedding locally
-        print("STEP 2: Generating embedding")
+        print("GENERATING EMBEDDING")
         model = get_model()
         query_embedding = model.encode(rewritten_query).tolist()
     except Exception as e:
@@ -190,7 +194,7 @@ def retrieve_context(query, scheme=None, top_k=10):
 
     semantic_results = []
     try:
-        print("STEP 3: Querying PostgreSQL")
+        print("QUERYING DATABASE")
         conn = psycopg2.connect(database_url, connect_timeout=5)
         register_vector(conn)
         cur = conn.cursor()
@@ -340,7 +344,7 @@ Question:
         return "Daily AI request limit reached. Please try again tomorrow."
 
     try:
-        print("STEP 4: Calling Groq API")
+        print("CALLING GROQ")
         response = groq_client.chat.completions.create(
             model=GROQ_MODEL,
             messages=[
@@ -366,128 +370,129 @@ class AnswerResponse(BaseModel):
 
 @app.post("/chat", response_model=AnswerResponse)
 async def ask_question(request: QuestionRequest):
-    print("STEP 1: Request received")
-    query = request.query
-    scheme = request.scheme
-    
-    # Check for PII (Security Layer)
-    if detect_pii(query):
-        refusal = (
-            "For privacy and security reasons, this assistant cannot process personal information "
-            "such as PAN, Aadhaar, phone numbers, or email addresses.\n"
-            "Please ask a factual question about mutual funds."
-        )
-        return {"answer": refusal, "sources": [], "documents": []}
-    
-    # Check for Financial Advice (Guardrail)
-    if is_asking_advice(query):
-        refusal = (
-            "I can only provide factual information about mutual funds such as expense ratios, "
-            "exit loads, SIP limits, and lock-in periods.\n\n"
-            "I cannot provide investment advice or recommendations.\n\n"
-            "For financial guidance, please consult a qualified financial advisor or refer to AMFI investor resources:\n"
-            "https://www.amfiindia.com/investor"
-        )
-        return {"answer": refusal, "sources": [], "documents": []}
-    
-    # Check for unsupported schemes in query text
-    if references_unsupported_scheme(query):
-        refusal = (
-            "This assistant currently provides factual information only for the following schemes:\n\n"
-            "• SBI Large Cap Fund\n"
-            "• SBI Small Cap Fund\n"
-            "• SBI Long Term Equity Fund\n"
-            "• SBI Focused Equity Fund\n"
-            "• All Schemes"
-        )
-        return {"answer": refusal, "sources": [], "documents": []}
-
-    # Check for unsupported schemes from dropdown
-    if scheme and scheme not in SUPPORTED_SCHEMES:
-        refusal = (
-            "This assistant currently provides factual information only for the following schemes:\n\n"
-            "• SBI Large Cap Fund\n"
-            "• SBI Small Cap Fund\n"
-            "• SBI Long Term Equity Fund\n"
-            "• SBI Focused Equity Fund\n"
-            "• All Schemes"
-        )
-        return {"answer": refusal, "sources": [], "documents": []}
-
-    contexts = retrieve_context(query, scheme=scheme if scheme else None)
-    
-    # Check for NAV query fallback enrichment
-    normalized_query = normalize_query(query)
-    is_nav_query = "nav" in normalized_query
-    
-    if is_nav_query and scheme and scheme in SCHEME_AMC_MAP:
-        has_nav_data = False
-        if contexts:
-            for ctx in contexts:
-                # Stricter check: Look for the specific pattern "NAV ... as on" which indicates factual data
-                if re.search(r"nav [a-z ]*as on", ctx["content"], re.IGNORECASE):
-                    has_nav_data = True
-                    break
-        
-        if not has_nav_data:
-             selected_scheme = scheme 
-             fallback_url = SCHEME_AMC_MAP[selected_scheme]
-             answer = f"The current Net Asset Value (NAV) information for {selected_scheme} is available on the official AMC page: {fallback_url}. Please refer to the scheme page for the latest update."
-             return {
-                 "answer": answer,
-                 "sources": [fallback_url],
-                 "documents": [f"{selected_scheme} Official Page"]
-             }
-
-    if not contexts:
-        return {
-            "answer": "I do not have the factual information for this specific request.",
-            "sources": [],
-            "documents": []
-        }
-    
-    # Milestone Requirement: Exactly ONE citation link. Use ONLY the highest ranked chunk.
-    contexts = contexts[:1]
-    
-    # Force mandatory ELSS disclosure into context for grounding
-    normalized_query = normalize_query(query)
-    if contexts:
-        # Check specifically for tax benefit / section 80c
-        if "section 80c" in normalized_query or "tax benefit" in normalized_query:
-             # Craft a very targeted context that forces inclusion of both facts
-             contexts[0]["content"] = "CRITICAL: ELSS schemes have a statutory lock-in period of 3 years from the date of allotment and qualify for deduction under Section 80C of the Income Tax Act."
-        # Check for other ELSS or Tax Benefit keywords
-        elif "elss" in normalized_query or "long term" in normalized_query:
-            # Prefix with CRITICAL string - now prompt matches this prefix more robustly
-            contexts[0]["content"] = "CRITICAL: ELSS schemes have a statutory lock-in period of 3 years from the date of allotment.\n" + contexts[0]["content"]
-    
-    if contexts:
-        print(f"DEBUG: Context 0 Content:\n{contexts[0]['content'][:200]}...")
-
-    expected_refusal = "I do not have the factual information for this specific request."
-    
     try:
+        print("REQUEST RECEIVED")
+        query = request.query
+        scheme = request.scheme
+        
+        # Check for PII (Security Layer)
+        if detect_pii(query):
+            refusal = (
+                "For privacy and security reasons, this assistant cannot process personal information "
+                "such as PAN, Aadhaar, phone numbers, or email addresses.\n"
+                "Please ask a factual question about mutual funds."
+            )
+            return {"answer": refusal, "sources": [], "documents": []}
+        
+        # Check for Financial Advice (Guardrail)
+        if is_asking_advice(query):
+            refusal = (
+                "I can only provide factual information about mutual funds such as expense ratios, "
+                "exit loads, SIP limits, and lock-in periods.\n\n"
+                "I cannot provide investment advice or recommendations.\n\n"
+                "For financial guidance, please consult a qualified financial advisor or refer to AMFI investor resources:\n"
+                "https://www.amfiindia.com/investor"
+            )
+            return {"answer": refusal, "sources": [], "documents": []}
+        
+        # Check for unsupported schemes in query text
+        if references_unsupported_scheme(query):
+            refusal = (
+                "This assistant currently provides factual information only for the following schemes:\n\n"
+                "• SBI Large Cap Fund\n"
+                "• SBI Small Cap Fund\n"
+                "• SBI Long Term Equity Fund\n"
+                "• SBI Focused Equity Fund\n"
+                "• All Schemes"
+            )
+            return {"answer": refusal, "sources": [], "documents": []}
+
+        # Check for unsupported schemes from dropdown
+        if scheme and scheme not in SUPPORTED_SCHEMES:
+            refusal = (
+                "This assistant currently provides factual information only for the following schemes:\n\n"
+                "• SBI Large Cap Fund\n"
+                "• SBI Small Cap Fund\n"
+                "• SBI Long Term Equity Fund\n"
+                "• SBI Focused Equity Fund\n"
+                "• All Schemes"
+            )
+            return {"answer": refusal, "sources": [], "documents": []}
+
+        contexts = retrieve_context(query, scheme=scheme if scheme else None)
+        
+        # Check for NAV query fallback enrichment
+        normalized_query = normalize_query(query)
+        is_nav_query = "nav" in normalized_query
+        
+        if is_nav_query and scheme and scheme in SCHEME_AMC_MAP:
+            has_nav_data = False
+            if contexts:
+                for ctx in contexts:
+                    # Stricter check: Look for the specific pattern "NAV ... as on" which indicates factual data
+                    if re.search(r"nav [a-z ]*as on", ctx["content"], re.IGNORECASE):
+                        has_nav_data = True
+                        break
+            
+            if not has_nav_data:
+                 selected_scheme = scheme 
+                 fallback_url = SCHEME_AMC_MAP[selected_scheme]
+                 answer = f"The current Net Asset Value (NAV) information for {selected_scheme} is available on the official AMC page: {fallback_url}. Please refer to the scheme page for the latest update."
+                 return {
+                     "answer": answer,
+                     "sources": [fallback_url],
+                     "documents": [f"{selected_scheme} Official Page"]
+                 }
+
+        if not contexts:
+            return {
+                "answer": "I do not have the factual information for this specific request.",
+                "sources": [],
+                "documents": []
+            }
+        
+        # Milestone Requirement: Exactly ONE citation link. Use ONLY the highest ranked chunk.
+        contexts = contexts[:1]
+        
+        # Force mandatory ELSS disclosure into context for grounding
+        normalized_query = normalize_query(query)
+        if contexts:
+            # Check specifically for tax benefit / section 80c
+            if "section 80c" in normalized_query or "tax benefit" in normalized_query:
+                 # Craft a very targeted context that forces inclusion of both facts
+                 contexts[0]["content"] = "CRITICAL: ELSS schemes have a statutory lock-in period of 3 years from the date of allotment and qualify for deduction under Section 80C of the Income Tax Act."
+            # Check for other ELSS or Tax Benefit keywords
+            elif "elss" in normalized_query or "long term" in normalized_query:
+                # Prefix with CRITICAL string - now prompt matches this prefix more robustly
+                contexts[0]["content"] = "CRITICAL: ELSS schemes have a statutory lock-in period of 3 years from the date of allotment.\n" + contexts[0]["content"]
+        
+        if contexts:
+            print(f"DEBUG: Context 0 Content:\n{contexts[0]['content'][:200]}...")
+
+        expected_refusal = "I do not have the factual information for this specific request."
+        
         answer = generate_answer(query, contexts)
         
         # Ensure no sources/documents are attached if answer is a refusal or unknown
         # We check for exact match or presence of the refusal phrase
         if expected_refusal in answer:
+            print("RETURNING RESPONSE (Refusal)")
             return {
                 "answer": expected_refusal,
                 "sources": [],
                 "documents": []
             }
             
-        print("STEP 5: Returning response")
+        print("RETURNING RESPONSE")
         return {
             "answer": answer,
             "sources": [c["url"] for c in contexts],
             "documents": [c["title"] for c in contexts]
         }
     except Exception as e:
-        print(f"Error in ask_question: {e}")
+        print(f"CHAT ERROR: {e}")
         return {
-            "answer": "The AI assistant has reached its request limit for today. Please try again later.",
+            "answer": "An error occurred while processing your request. Please try again later.",
             "sources": [],
             "documents": []
         }
