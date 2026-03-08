@@ -19,6 +19,7 @@ app = FastAPI()
 
 @app.get("/metadata")
 async def get_metadata():
+    print("STEP 1: Request received (Metadata)")
     return {"data_last_updated": DATA_LAST_UPDATED}
 
 # Enable CORS for the frontend
@@ -181,6 +182,7 @@ def retrieve_context(query, scheme=None, top_k=10):
     query_embedding = None
     try:
         # Generate embedding locally
+        print("STEP 2: Generating embedding")
         model = get_model()
         query_embedding = model.encode(rewritten_query).tolist()
     except Exception as e:
@@ -188,8 +190,8 @@ def retrieve_context(query, scheme=None, top_k=10):
 
     semantic_results = []
     try:
-        print("Connecting to PostgreSQL database...")
-        conn = psycopg2.connect(database_url)
+        print("STEP 3: Querying PostgreSQL")
+        conn = psycopg2.connect(database_url, connect_timeout=5)
         register_vector(conn)
         cur = conn.cursor()
         
@@ -338,6 +340,7 @@ Question:
         return "Daily AI request limit reached. Please try again tomorrow."
 
     try:
+        print("STEP 4: Calling Groq API")
         response = groq_client.chat.completions.create(
             model=GROQ_MODEL,
             messages=[
@@ -363,6 +366,7 @@ class AnswerResponse(BaseModel):
 
 @app.post("/chat", response_model=AnswerResponse)
 async def ask_question(request: QuestionRequest):
+    print("STEP 1: Request received")
     query = request.query
     scheme = request.scheme
     
@@ -474,6 +478,7 @@ async def ask_question(request: QuestionRequest):
                 "documents": []
             }
             
+        print("STEP 5: Returning response")
         return {
             "answer": answer,
             "sources": [c["url"] for c in contexts],
