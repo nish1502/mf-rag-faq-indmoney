@@ -105,6 +105,14 @@ SUPPORTED_SCHEMES = [
     "All Schemes"
 ]
 
+# AMC Page Mapping for Fallback Context
+SCHEME_AMC_MAP = {
+    "SBI Large Cap Fund": "https://www.sbimf.com/sbimf-scheme-details/sbi-large-cap-fund-(formerly-known-as-sbi-bluechip-fund)-43",
+    "SBI Small Cap Fund": "https://www.sbimf.com/sbimf-scheme-details/sbi-small-cap-fund-329",
+    "SBI Focused Fund": "https://www.sbimf.com/sbimf-scheme-details/sbi-focused-fund-25",
+    "SBI Long Term Equity Fund": "https://www.sbimf.com/sbimf-scheme-details/sbi-long-term-equity-fund-(previously-known-as-sbi-magnum-taxgain-scheme)-3"
+}
+
 # AI Request Limiter Settings
 MAX_REQUESTS_PER_DAY = 40
 request_count = 0
@@ -149,10 +157,10 @@ def retrieve_context(query, scheme=None, top_k=10):
 
     # Scheme matching using URL patterns
     scheme_url_map = {
-        "SBI Large Cap Fund": "sbi-large-cap",
-        "SBI Small Cap Fund": "sbi-small-cap",
-        "SBI Focused Fund": "sbi-focused",
-        "SBI Long Term Equity Fund": "sbi-long-term"
+        "SBI Small Cap Fund": ["small-cap"],
+        "SBI Focused Fund": ["focused"],
+        "SBI Long Term Equity Fund": ["long-term"],
+        "SBI Large Cap Fund": ["large-cap", "bluechip"]
     }
 
     # Step 1: Query Rewriting for better context
@@ -177,16 +185,24 @@ def retrieve_context(query, scheme=None, top_k=10):
         
         rows = []
         if query_embedding:
-            if scheme and scheme != "All Schemes" and scheme in scheme_url_map:
-                url_pattern = f"%{scheme_url_map[scheme]}%"
-                cur.execute("""
+            # Check if a specific scheme filter is requested
+            scheme_filter = scheme_url_map.get(scheme)
+            
+            if scheme and scheme != "All Schemes" and scheme_filter:
+                # Build OR condition for multiple patterns
+                url_conditions = " OR ".join(["url ILIKE %s"] * len(scheme_filter))
+                url_patterns = [f"%{p}%" for p in scheme_filter]
+                
+                query_sql = f"""
                     SELECT content, url, title, (1 - (embedding <=> %s::vector)) AS similarity
                     FROM fund_embeddings
-                    WHERE url ILIKE %s
+                    WHERE ({url_conditions})
                     ORDER BY embedding <-> %s::vector
                     LIMIT %s;
-                """, (query_embedding, url_pattern, query_embedding, top_k))
+                """
+                cur.execute(query_sql, (query_embedding, *url_patterns, query_embedding, top_k))
             else:
+                # Global Vector Search across all schemes
                 cur.execute("""
                     SELECT content, url, title, (1 - (embedding <=> %s::vector)) AS similarity
                     FROM fund_embeddings
@@ -207,14 +223,20 @@ def retrieve_context(query, scheme=None, top_k=10):
                 
             print(f"Keyword fallback using pattern: {search_pattern}")
 
-            if scheme and scheme != "All Schemes" and scheme in scheme_url_map:
-                url_pattern = f"%{scheme_url_map[scheme]}%"
-                cur.execute("""
+            # Use scheme filter if available
+            scheme_filter = scheme_url_map.get(scheme)
+            
+            if scheme and scheme != "All Schemes" and scheme_filter:
+                url_conditions = " OR ".join(["url ILIKE %s"] * len(scheme_filter))
+                url_patterns = [f"%{p}%" for p in scheme_filter]
+                
+                query_sql = f"""
                     SELECT content, url, title, 1.0 AS similarity
                     FROM fund_embeddings
-                    WHERE content ILIKE %s AND url ILIKE %s
+                    WHERE content ILIKE %s AND ({url_conditions})
                     LIMIT %s;
-                """, (search_pattern, url_pattern, top_k))
+                """
+                cur.execute(query_sql, (search_pattern, *url_patterns, top_k))
             else:
                 cur.execute("""
                     SELECT content, url, title, 1.0 AS similarity
@@ -257,11 +279,13 @@ def retrieve_context(query, scheme=None, top_k=10):
             keyword_match_count = sum(1 for kw in target_keywords if kw in content_lower)
             item['keyword_boost'] = keyword_match_count
         
-        # Primary Priority: Chunks containing 'nav' AND a currency symbol (₹) if query is about nav
-        # Secondary Priority: Chunks containing 'nav'
-        # Tertiary Priority: Keyword matches
-        # Quaternary Priority: Vector similarity
+        # Primary Priority: Chunks containing 'nav ... as on' if query is about nav
+        # Secondary Priority: Chunks containing 'nav' AND a currency symbol (₹) if query is about nav
+        # Tertiary Priority: Chunks containing 'nav'
+        # Quaternary Priority: Keyword matches
+        # Quinary Priority: Vector similarity
         semantic_results.sort(key=lambda x: (
+            (re.search(r"nav [a-z ]*as on", x["content"], re.IGNORECASE) is not None) if "nav" in normalized_query_lower else False,
             ("nav" in x['content'].lower() and "₹" in x['content']) if "nav" in normalized_query_lower else False,
             ("nav" in x['content'].lower()) if "nav" in normalized_query_lower else False,
             x.get('keyword_boost', 0), 
@@ -377,6 +401,30 @@ async def ask_question(request: QuestionRequest):
         return {"answer": refusal, "sources": [], "documents": []}
 
     contexts = retrieve_context(query, scheme=scheme if scheme else None)
+    
+    # Check for NAV query fallback enrichment
+    normalized_query = normalize_query(query)
+    is_nav_query = "nav" in normalized_query
+    
+    if is_nav_query and scheme and scheme in SCHEME_AMC_MAP:
+        has_nav_data = False
+        if contexts:
+            for ctx in contexts:
+                # Stricter check: Look for the specific pattern "NAV ... as on" which indicates factual data
+                if re.search(r"nav [a-z ]*as on", ctx["content"], re.IGNORECASE):
+                    has_nav_data = True
+                    break
+        
+        if not has_nav_data:
+             selected_scheme = scheme 
+             fallback_url = SCHEME_AMC_MAP[selected_scheme]
+             answer = f"The current Net Asset Value (NAV) information for {selected_scheme} is available on the official AMC page: {fallback_url}. Please refer to the scheme page for the latest update."
+             return {
+                 "answer": answer,
+                 "sources": [fallback_url],
+                 "documents": [f"{selected_scheme} Official Page"]
+             }
+
     if not contexts:
         return {
             "answer": "I do not have the factual information for this specific request.",

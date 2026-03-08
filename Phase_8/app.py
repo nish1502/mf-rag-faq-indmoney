@@ -88,6 +88,37 @@ SUPPORTED_SCHEMES = [
     "SBI Focused Fund"
 ]
 
+# Query Normalization Synonyms
+QUERY_SYNONYMS = {
+    "fund charges": "expense ratio",
+    "charges": "expense ratio",
+    "lump sum investment": "minimum investment",
+    "lumpsum": "minimum investment",
+    "tax benefits": "section 80c",
+    "tax benefit": "section 80c",
+    "elss tax": "section 80c",
+    "nav of the fund": "nav",
+    "fund nav": "nav",
+    "net asset value": "nav",
+    "lock-in": "3 years"
+}
+
+def normalize_query(query: str) -> str:
+    """Normalizes the query using a synonym dictionary."""
+    normalized_query = query.lower()
+    for key in sorted(QUERY_SYNONYMS.keys(), key=len, reverse=True):
+        if key in normalized_query:
+            normalized_query = normalized_query.replace(key, QUERY_SYNONYMS[key])
+    return normalized_query
+
+# AMC Page Mapping for Fallback Context
+SCHEME_AMC_MAP = {
+    "SBI Large Cap Fund": "https://www.sbimf.com/sbimf-scheme-details/sbi-large-cap-fund-(formerly-known-as-sbi-bluechip-fund)-43",
+    "SBI Small Cap Fund": "https://www.sbimf.com/sbimf-scheme-details/sbi-small-cap-fund-329",
+    "SBI Focused Fund": "https://www.sbimf.com/sbimf-scheme-details/sbi-focused-fund-25",
+    "SBI Long Term Equity Fund": "https://www.sbimf.com/sbimf-scheme-details/sbi-long-term-equity-fund-(previously-known-as-sbi-magnum-taxgain-scheme)-3"
+}
+
 # AI Request Limiter Settings
 MAX_REQUESTS_PER_DAY = 40
 if "global_request_count" not in st.session_state:
@@ -116,10 +147,10 @@ def retrieve_context(query, scheme=None, top_k=8):
     semantic_results = []
     try:
         scheme_url_map = {
-            "SBI Large Cap Fund": "sbi-large-cap",
-            "SBI Small Cap Fund": "sbi-small-cap",
-            "SBI Focused Fund": "sbi-focused",
-            "SBI Long Term Equity Fund": "sbi-long-term"
+            "SBI Small Cap Fund": ["small-cap"],
+            "SBI Focused Fund": ["focused"],
+            "SBI Long Term Equity Fund": ["long-term"],
+            "SBI Large Cap Fund": ["large-cap", "bluechip"]
         }
 
         print("Connecting to PostgreSQL database...")
@@ -127,15 +158,21 @@ def retrieve_context(query, scheme=None, top_k=8):
         register_vector(conn)
         cur = conn.cursor()
         
-        if scheme and scheme != "All Schemes" and scheme in scheme_url_map:
-            url_pattern = f"%{scheme_url_map[scheme]}%"
-            cur.execute("""
+        # Check if a specific scheme filter is requested
+        scheme_filter = scheme_url_map.get(scheme)
+        
+        if scheme and scheme != "All Schemes" and scheme_filter:
+            url_conditions = " OR ".join(["url ILIKE %s"] * len(scheme_filter))
+            url_patterns = [f"%{p}%" for p in scheme_filter]
+            
+            query_sql = f"""
                 SELECT content, url, title, 1 - (embedding <=> %s::vector) AS similarity
                 FROM fund_embeddings
-                WHERE url ILIKE %s
-                ORDER BY embedding <=> %s::vector
+                WHERE ({url_conditions})
+                ORDER BY embedding <-> %s::vector
                 LIMIT %s;
-            """, (query_embedding, url_pattern, query_embedding, top_k))
+            """
+            cur.execute(query_sql, (query_embedding, *url_patterns, query_embedding, top_k))
         else:
             cur.execute("""
                 SELECT content, url, title, 1 - (embedding <=> %s::vector) AS similarity
@@ -341,19 +378,41 @@ if query := st.chat_input("Ask about expense ratios, exit loads, or SIP limits..
             st.session_state.messages.append({"role": "assistant", "content": refusal})
         else:
             with st.status("🔍 Deep searching fact database...", expanded=True) as status:
+                # Main RAG Pipeline
                 contexts = retrieve_context(query, scheme=selected_scheme, top_k=8)
+                
+                # Check for NAV query fallback enrichment
+                normalized_query = normalize_query(query)
+                is_nav_query = "nav" in normalized_query
+                
+                processed_nav_fallback = False
+                if is_nav_query and selected_scheme and selected_scheme in SCHEME_AMC_MAP:
+                    has_nav_data = False
+                    if contexts:
+                        for ctx in contexts:
+                            # Stricter check: Look for the specific pattern "NAV ... as on" which indicates factual data
+                            if re.search(r"nav [a-z ]*as on", ctx["content"], re.IGNORECASE):
+                                has_nav_data = True
+                                break
+                    
+                    if not has_nav_data:
+                         fallback_url = SCHEME_AMC_MAP[selected_scheme]
+                         answer = f"The current Net Asset Value (NAV) information for {selected_scheme} is available on the official AMC page: {fallback_url}. Please refer to the scheme page for the latest update.\n\nSource: {fallback_url}"
+                         status.update(label="✅ Ready!", state="complete", expanded=False)
+                         processed_nav_fallback = True
+                
+                if not processed_nav_fallback:
+                    if not contexts:
+                        answer = "I do not have the factual information for this specific request."
+                        status.update(label="❌ No factual data found.", state="error")
+                    else:
+                        status.update(label="✨ Synthesizing response...", state="running")
+                        formatted_contexts = contexts[:1]  # Strict ONE citation limit
+                        answer = generate_answer(query, formatted_contexts)
+                        status.update(label="✅ Ready!", state="complete", expanded=False)
             
-            if contexts:
-                status.update(label="✨ Synthesizing response...", state="running")
-                response = generate_answer(query, contexts)
-            else:
-                status.update(label="❌ No factual data found.", state="error")
-                response = "I do not have the factual information for this specific request."
-            
-            status.update(label="✅ Ready!", state="complete", expanded=False)
-        
-        st.markdown(response)
-        st.session_state.messages.append({"role": "assistant", "content": response})
+            st.markdown(answer)
+            st.session_state.messages.append({"role": "assistant", "content": answer})
 
     if st.button("Clear Chat History"):
         st.session_state.messages = []
