@@ -2,6 +2,12 @@
 
 A production-grade Retrieval-Augmented Generation (RAG) chatbot designed to answer factual questions about mutual fund schemes using official documents from AMCs, SEBI, and AMFI.
 
+## 🔗 Live Links
+
+🌐 **Frontend (Streamlit App):** https://mf-rag-faq-indmoney.vercel.app/ 
+⚙️ **Backend API (FastAPI):** https://mf-rag-faq-indmoney.onrender.com/docs
+💻 **GitHub Repository:** https://github.com/nish1502/mf-rag-faq-indmoney
+
 ## Overview
 This chatbot leverages a state-of-the-art RAG pipeline to provide accurate, source-backed information about mutual fund schemes. It specifically targets SBI Mutual Fund schemes, offering details on NAV, expense ratios, exit loads, minimum investments, and regulatory information.
 
@@ -9,6 +15,11 @@ This chatbot leverages a state-of-the-art RAG pipeline to provide accurate, sour
 *   **[Source List](source_list.csv)**: Complete list of official URLs for the corpus.
 *   **[Sample Q&A](sample_qa.md)**: Example factual questions and answers.
 *   **[Disclaimer](#disclaimer)**: Important notice regarding factual limitations.
+
+### 🎥 Demo Video
+A short demonstration of the chatbot answering factual mutual fund queries.
+
+Google Drive Link: https://drive.google.com/file/d/1hM70_p1Gx7-s2IKq5AlClIGl1gODbKxI/view?usp=drive_link
 
 ### AMC Covered
 * **SBI Mutual Fund**
