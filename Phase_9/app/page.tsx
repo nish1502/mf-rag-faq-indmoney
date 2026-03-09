@@ -42,11 +42,12 @@ export default function INDMoneyChatbot() {
 
     // Fetch metadata
     useEffect(() => {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-        fetch(`${apiUrl}/metadata`)
+        fetch("https://mf-rag-faq-indmoney.onrender.com/metadata", {
+            cache: "no-store"
+        })
             .then(res => res.json())
-            .then(data => setLastUpdated(data.data_last_updated))
-            .catch(() => setLastUpdated("05-03-2026")); // Fallback
+            .then(data => setLastUpdated(data.data_last_updated || "unavailable"))
+            .catch(() => setLastUpdated("unavailable"));
     }, []);
 
     const supportedSchemes = schemes.map(s => s.name);

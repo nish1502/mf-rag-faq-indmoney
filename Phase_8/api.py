@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Request
+from datetime import datetime
 import requests
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -21,12 +22,9 @@ app = FastAPI()
 
 @app.get("/metadata")
 async def get_metadata():
-    try:
-        print("METADATA REQUEST RECEIVED")
-        return {"data_last_updated": DATA_LAST_UPDATED}
-    except Exception as e:
-        print(f"METADATA ERROR: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return {
+        "data_last_updated": datetime.now().strftime("%d %B %Y, %I:%M %p")
+    }
 
 @app.post("/test")
 async def test_endpoint():

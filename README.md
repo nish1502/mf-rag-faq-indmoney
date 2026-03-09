@@ -8,6 +8,13 @@ A production-grade Retrieval-Augmented Generation (RAG) chatbot designed to answ
 *  ⚙️ **Backend API (FastAPI):** https://mf-rag-faq-indmoney.onrender.com/docs
 *  💻 **GitHub Repository:** https://github.com/nish1502/mf-rag-faq-indmoney
 
+## ⚠️ Deployment Note
+
+The backend is deployed on the Render free tier.  
+If the service has been inactive, the first request may take **30–60 seconds** while the server wakes up.
+
+Subsequent requests respond much faster.
+
 ## Overview
 This chatbot leverages a state-of-the-art RAG pipeline to provide accurate, source-backed information about mutual fund schemes. It specifically targets SBI Mutual Fund schemes, offering details on NAV, expense ratios, exit loads, minimum investments, and regulatory information.
 
@@ -56,12 +63,13 @@ The chatbot follows a robust RAG architecture:
 ---
 
 ## Tech Stack
-*   **Backend**: FastAPI (Python)
-*   **Frontend**: Streamlit
-*   **Database**: PostgreSQL with `pgvector`
-*   **Embeddings**: SentenceTransformers (`all-MiniLM-L6-v2`)
-*   **LLM**: Groq (LLaMA 3.1 8B Instant)
-*   **Deployment Tools**: Render (Backend), Vercel (Frontend), GitHub Actions (Scheduler)
+
+*  Backend: FastAPI (Python)  
+*  Frontend: Next.js (React) deployed on Vercel  
+*  Database: PostgreSQL with pgvector  
+*  Embeddings: SentenceTransformers (all-MiniLM-L6-v2)  
+* LLM: Groq (LLaMA 3.1 8B Instant)  
+* Deployment Tools: Render (Backend), Vercel (Frontend), GitHub Actions (Scheduler)
 
 ---
 
@@ -114,10 +122,13 @@ The system is built with multiple safety layers:
     ```
 
 ### Frontend Setup
-1.  Run the Streamlit application:
+1.  The frontend is a **Next.js chatbot interface** deployed   on **Vercel**. To run the frontend locally:
+
     ```bash
-    streamlit run Phase_8/app.py
-    ```
+    cd Phase_9
+    npm install
+    npm run dev
+     ```
 ---
 
 ## AI Product Thinking (AI PM Perspective)
